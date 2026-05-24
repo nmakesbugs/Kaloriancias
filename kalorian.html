@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Kalorian & Celtic — Beast Master</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0b1a0b; overflow-x: hidden; }
+    body { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pulse   { 0%,100% { opacity:.8; } 50% { opacity:.25; } }
+    @keyframes bounce  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-14px); } }
+    @keyframes glow    { 0%,100% { box-shadow:0 4px 24px rgba(212,168,78,.35); } 50% { box-shadow:0 4px 48px rgba(212,168,78,.7); } }
+
+    .fade-up  { animation: fadeUp .5s ease both; }
+    .bounce   { animation: bounce 3s ease-in-out infinite; display:inline-block; }
+    .glow-btn { animation: glow 2.5s ease-in-out infinite; }
+
+    ::-webkit-scrollbar       { width:4px; }
+    ::-webkit-scrollbar-track { background:#0b1a0b; }
+    ::-webkit-scrollbar-thumb { background:#264026; border-radius:4px; }
+
+    #loading {
+      position:fixed; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:20px;
+      background:#0b1a0b; color:#d4a84e;
+      font-family:'Lora',Georgia,serif; font-size:18px;
+    }
+    #loading .w { font-size:64px; animation:bounce 1.5s ease-in-out infinite; }
+    #root { display:none; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="w">🐺</div>
+  <div>Kalorian &amp; Celtic are getting ready…</div>
+</div>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+/* ── CONSTANTS ─────────────────────────────────────────────── */
+const K_MAX = 85;
+const C_MAX = 45;
+const SL_MAX = [4, 3, 3];
+
+/* ── PALETTE ───────────────────────────────────────────────── */
+const G = {
+  bg:'#0b1a0b', card:'#122012', cardHi:'#1a301a', border:'#264026',
+  gold:'#d4a84e', goldHi:'#f0c870',
+  cream:'#ede0c4', dim:'#8a7a5a',
+  red:'#c84040', redHi:'#ff7070',
+  green:'#4aaa66', wolf:'#60b8b8', wolfDim:'#3a8080', purple:'#b06ec8',
+};
+const fH = "'Cinzel Decorative',serif";
+const fB = "'Lora',serif";
+
+/* ── ACTIONS ───────────────────────────────────────────────── */
+const ACTIONS = [
+  { id:'bow',    emoji:'🏹', name:'Shoot My Bow',       tag:'ATTACK',           col:G.red,
+    when:'Enemy is any distance away',
+    say:'"Kalorian fires two arrows at [enemy]!"',
+    steps:[
+      {n:'Arrow 1',         d:'Roll d20 + 8. If 10 or higher → HIT! Roll d8 + 4 for damage.'},
+      {n:'Arrow 2',         d:'Roll again! Same — d20 + 8 to hit, d8 + 4 damage.'},
+      {n:"Hunter's Mark?",  d:"If Hunter's Mark is on this enemy → add +d6 to EACH hit! 🎯"},
+    ],
+    tip:"You ALWAYS get two arrows every single turn. Always shoot both!" },
+
+  { id:'celtic', emoji:'🐺', name:'Send Celtic!',        tag:'ATTACK',           col:G.wolf,
+    when:'An enemy is close and Celtic has good HP',
+    say:'"Celtic — attack!"',
+    steps:[
+      {n:'Celtic Bites',   d:'Roll d20 + 5. If 9 or higher → HIT! Roll 2d6 + 3 damage.'},
+      {n:'Knock Down!',    d:'Enemy rolls d20. If they get 12 or lower → they FALL DOWN! Next attack has advantage.'},
+      {n:'Pack Tactics',   d:'If Kalorian is next to the SAME enemy → Celtic rolls twice and takes the better number! 🎲🎲'},
+    ],
+    tip:"Stay right next to Celtic's target. Pack Tactics changes everything!" },
+
+  { id:'mark',   emoji:'🎯', name:"Hunter's Mark",       tag:'SPELL • 1st Level', col:G.gold,
+    when:'Start of combat — do this BEFORE shooting',
+    say:'"Kalorian marks [enemy] with Hunter\'s Mark!"',
+    steps:[
+      {n:'Use a Spell Slot',  d:'Tap one gold ⭐ dot to mark it used.'},
+      {n:'Pick Your Target',  d:'Every hit on that enemy adds +d6 extra damage — from bow OR Celtic!'},
+      {n:'Move the Mark',     d:'If they go down, move Hunter\'s Mark to a new enemy as a bonus action.'},
+    ],
+    tip:"Do this first, before attacking. Every single hit hits harder all fight!" },
+
+  { id:'cure',   emoji:'💚', name:'Cure Wounds',          tag:'SPELL • 1st Level', col:G.green,
+    when:'Someone is badly hurt and needs HP back',
+    say:'"Kalorian heals [person]!"',
+    steps:[
+      {n:'Use a Spell Slot', d:'Tap one gold ⭐ dot to mark it used.'},
+      {n:'Roll Healing',     d:'Roll 1d8 + 3. That\'s how many HP come back!'},
+      {n:'Touch Required',   d:'Kalorian must be right next to the person to heal them.'},
+    ],
+    tip:"Save this for real emergencies. Heal Celtic first if he's almost down!" },
+
+  { id:'trace',  emoji:'🌫️', name:'Pass Without Trace',  tag:'SPELL • 2nd Level', col:G.wolf,
+    when:'The whole party needs to sneak somewhere',
+    say:'"Kalorian casts Pass Without Trace!"',
+    steps:[
+      {n:'Use a 2nd Level Slot', d:'Tap one blue 💫 dot to mark it used.'},
+      {n:'Everyone Sneaks!',     d:'The whole party gets +10 to stealth rolls for 1 hour. That\'s huge!'},
+      {n:'Stay Together',        d:'Party must stay near Kalorian for it to keep working.'},
+    ],
+    tip:"+10 to sneaking is massive. Great before ambushing enemies!" },
+
+  { id:'help',   emoji:'🤝', name:'Help a Friend',        tag:'ACTION',           col:G.cream,
+    when:'A friend really needs to succeed at something important',
+    say:'"Kalorian helps [friend]!"',
+    steps:[
+      {n:'No Roll',          d:'Just tell Dad you\'re helping your friend.'},
+      {n:'Friend Rolls Twice', d:'They roll their dice twice and take the better number!'},
+      {n:'Works on Attacks', d:'Help a friend attack — they roll to hit twice!'},
+    ],
+    tip:"Great when a teammate absolutely cannot afford to fail." },
+
+  { id:'search', emoji:'👁️', name:'Look Around',          tag:'ACTION',           col:G.dim,
+    when:'You want to find hidden things, enemies, or clues',
+    say:'"Kalorian searches the area!"',
+    steps:[
+      {n:'Roll Perception', d:'Roll d20 + 7. Higher = more you notice. Dad tells you what you find!'},
+      {n:'Celtic Helps',    d:'Say "Celtic sniffs around too" — you might get extra clues!'},
+      {n:'Ranger Senses',   d:'Kalorian notices things others miss, especially in the wild.'},
+    ],
+    tip:"Describe Celtic sniffing the air or pawing the ground. Dad loves roleplaying that!" },
+
+  { id:'dodge',  emoji:'🛡️', name:'Dodge & Survive',      tag:'ACTION',           col:'#8888cc',
+    when:'Kalorian is being hit a lot and HP is getting low',
+    say:'"Kalorian dodges!"',
+    steps:[
+      {n:'Dodge Action',   d:'Enemies trying to hit Kalorian must roll twice and take the LOWER number.'},
+      {n:'No Shooting',    d:'Kalorian doesn\'t attack this turn — but Celtic still can!'},
+      {n:'Stay Alive!',    d:'If Kalorian is under 30 HP, dodging might save your life.'},
+    ],
+    tip:"Let Celtic do the fighting while Kalorian survives. You're a TEAM!" },
+];
+
+/* ── SHARED COMPONENTS ─────────────────────────────────────── */
+
+function HPBar({ current, max, color }) {
+  const pct = Math.max(0, current/max*100);
+  const bar = pct>50 ? color : pct>25 ? '#cc8822' : G.red;
+  return (
+    <div style={{background:G.border,borderRadius:99,height:12,overflow:'hidden',marginTop:8}}>
+      <div style={{width:`${pct}%`,height:'100%',background:bar,borderRadius:99,transition:'width .4s ease,background .3s'}}/>
+    </div>
+  );
+}
+
+function HPTracker({ label, emoji, current, max, color, onSet }) {
+  const adj = d => onSet(Math.max(0, Math.min(max, current+d)));
+  const isDead = current===0, low = current < max*.3;
+  return (
+    <div style={{background:G.card,border:`1px solid ${isDead?G.red:low?'#7a3810':G.border}`,borderRadius:16,padding:'18px 20px',transition:'border-color .3s'}}>
+      <div style={{color:G.dim,fontFamily:fB,fontSize:11,textTransform:'uppercase',letterSpacing:2}}>{emoji} {label}</div>
+      <div style={{display:'flex',alignItems:'baseline',gap:8,marginTop:6}}>
+        <span style={{color:isDead?G.red:low?'#ff9944':G.cream,fontFamily:fH,fontSize:38,lineHeight:1}}>{current}</span>
+        <span style={{color:G.dim,fontFamily:fB,fontSize:16}}>/ {max}</span>
+        {isDead && <span style={{color:G.red,fontFamily:fB,fontSize:14}}>💀 Down!</span>}
+        {!isDead&&low && <span style={{color:'#ff9944',fontFamily:fB,fontSize:13}}>⚠️ Low!</span>}
+      </div>
+      <HPBar current={current} max={max} color={color}/>
+      <div style={{display:'flex',gap:8,marginTop:14}}>
+        {[[-10,'−10'],[-1,'−1'],[1,'+1'],[10,'+10']].map(([d,lbl])=>(
+          <button key={d} onClick={()=>adj(d)} style={{
+            flex:1,padding:'11px 0',minHeight:48,
+            background:d<0?'#2e0e0e':'#0e2e18',
+            border:`1px solid ${d<0?'#6a2020':'#1a6a30'}`,
+            color:d<0?G.redHi:G.green,
+            borderRadius:10,cursor:'pointer',fontSize:15,fontWeight:700,fontFamily:fB
+          }}>{lbl}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SpellSlots({ slots, onChange }) {
+  const colors = [G.gold,G.wolf,G.purple];
+  const labels = ['1st Level Spells','2nd Level Spells','3rd Level Spells'];
+  const emojis = ['⭐','💫','🌟'];
+  const use     = i => { if(slots[i]>0){const n=[...slots];n[i]--;onChange(n);} };
+  const restore = i => { if(slots[i]<SL_MAX[i]){const n=[...slots];n[i]++;onChange(n);} };
+  return (
+    <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:16,padding:'18px 20px'}}>
+      <div style={{color:G.gold,fontFamily:fH,fontSize:13,marginBottom:18}}>✨ Spell Slots</div>
+      {labels.map((lbl,i)=>(
+        <div key={i} style={{marginBottom:i<2?16:0}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{color:G.dim,fontFamily:fB,fontSize:12}}>{emojis[i]} {lbl}</div>
+            <div style={{color:G.dim,fontFamily:fB,fontSize:11}}>{slots[i]} / {SL_MAX[i]} left</div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            {Array.from({length:SL_MAX[i]}).map((_,j)=>{
+              const avail=j<slots[i];
+              return (
+                <button key={j} onClick={()=>avail?use(i):restore(i)}
+                  title={avail?'Tap to use this slot':'Tap to restore this slot'}
+                  style={{width:48,height:48,borderRadius:12,border:`2px solid ${colors[i]}`,
+                    background:avail?colors[i]:'transparent',cursor:'pointer',transition:'all .2s'}}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div style={{color:G.dim,fontFamily:fB,fontSize:11,marginTop:14}}>
+        Filled = available. Tap to use. Tap empty to restore. Long Rest fills all.
+      </div>
+    </div>
+  );
+}
+
+function StatBadge({ label, value, sub, color }) {
+  return (
+    <div style={{background:G.card,border:`1px solid ${G.border}`,borderRadius:12,padding:'14px 10px',textAlign:'center',flex:1}}>
+      <div style={{color:color||G.gold,fontFamily:fH,fontSize:22}}>{value}</div>
+      <div style={{color:G.cream,fontFamily:fB,fontSize:12,marginTop:4}}>{label}</div>
+      {sub&&<div style={{color:G.dim,fontFamily:fB,fontSize:10,marginTop:3}}>{sub}</div>}
+    </div>
+  );
+}
+
+function InfoBox({ color, label, text, italic }) {
+  return (
+    <div style={{background:G.bg,borderRadius:12,padding:'12px 16px',marginBottom:16,borderLeft:`4px solid ${color}`}}>
+      <div style={{color,fontFamily:fB,fontSize:12,textTransform:'uppercase',letterSpacing:1}}>{label}</div>
+      <div style={{color:G.cream,fontFamily:fB,fontSize:15,marginTop:6,fontStyle:italic?'italic':'normal',lineHeight:1.6}}>{text}</div>
+    </div>
+  );
+}
+
+/* ── RECOMMENDATION ENGINE ─────────────────────────────────── */
+function RecommendEngine({ cHP, onClose }) {
+  const [step, setStep] = useState('q1');
+  const [rec,  setRec]  = useState(null);
+
+  const RECS = {
+    search:           { action:'search', title:'Look Around with Celtic!',
+                        why:"No enemies yet — use Kalorian's sharp eyes and Celtic's nose to explore safely. Celtic might sense danger before you can see it!" },
+    bow_marked:       { action:'bow', title:'Shoot Your Bow! 🏹',
+                        why:"Hunter's Mark is active — fire both arrows and add +d6 to every hit. Stay at range and let the arrows do the work!" },
+    bow_mark_first:   { action:'mark', title:"Hunter's Mark, Then Shoot!",
+                        why:"Spend your bonus action to put Hunter's Mark on the enemy, THEN fire both arrows. That +d6 on every hit adds up so fast!" },
+    celtic_marked:    { action:'celtic', title:'Send Celtic In! 🐺',
+                        why:"You're both close — Pack Tactics activates! Celtic rolls twice to hit. Hunter's Mark adds +d6 to the bite too. This is your most powerful combo!" },
+    celtic_mark_first:{ action:'celtic', title:"Hunter's Mark, Then Celtic!",
+                        why:"Use Hunter's Mark as a bonus action first, then send Celtic. Stay next to the same enemy so Celtic gets Pack Tactics. Roll twice, take the better — deadly!" },
+    protect:          { action:'dodge', title:'Protect Kalorian & Celtic 🛡️',
+                        why:"Celtic is hurting — keep them safe! Kalorian dodges to avoid damage this turn. Consider healing Celtic with Cure Wounds if it gets worse." },
+  };
+
+  const btnStyle = col => ({
+    width:'100%',padding:'16px 14px',minHeight:58,
+    background:col?col+'18':G.cardHi, border:`1px solid ${col||G.border}`,
+    color:G.cream,borderRadius:14,cursor:'pointer',
+    fontFamily:fB,fontSize:17,fontWeight:700,lineHeight:1.3,
+    marginBottom:12, textAlign:'center'
+  });
+
+  const chosen = rec ? ACTIONS.find(a=>a.id===rec.action) : null;
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+      <div className="fade-up" style={{background:G.card,border:`2px solid ${G.gold}`,borderRadius:24,padding:28,maxWidth:540,width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
+
+        {!rec ? (
+          <>
+            <div style={{color:G.gold,fontFamily:fH,fontSize:16,marginBottom:24}}>🎲 What Should I Do?</div>
+
+            {step==='q1' && <>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:18,lineHeight:1.7,marginBottom:20}}>Is there an enemy in the fight?</div>
+              <button style={btnStyle(G.red)}    onClick={()=>setStep('q2_close')}>⚔️ Yes — close by!</button>
+              <button style={btnStyle('#4444aa')} onClick={()=>setStep('q2_far')}>🏹 Yes — far away!</button>
+              <button style={btnStyle(G.green)}   onClick={()=>setRec(RECS.search)}>🌿 No enemies yet</button>
+            </>}
+
+            {step==='q2_close' && <>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:18,lineHeight:1.7,marginBottom:20}}>How is Celtic doing right now?</div>
+              <button style={btnStyle(G.wolf)} onClick={()=>setStep('q3_close')}>🐺 Celtic is ready! ({cHP} HP)</button>
+              <button style={btnStyle(G.red)}  onClick={()=>setRec(RECS.protect)}>💔 Celtic is hurt or low HP!</button>
+            </>}
+
+            {step==='q2_far' && <>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:18,lineHeight:1.7,marginBottom:20}}>Is Hunter's Mark 🎯 already on the enemy?</div>
+              <button style={btnStyle(G.gold)} onClick={()=>setRec(RECS.bow_marked)}>✅ Yes, Hunter's Mark is on!</button>
+              <button style={btnStyle(G.dim)}  onClick={()=>setRec(RECS.bow_mark_first)}>❌ Not yet</button>
+            </>}
+
+            {step==='q3_close' && <>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:18,lineHeight:1.7,marginBottom:20}}>Is Hunter's Mark 🎯 active on the enemy?</div>
+              <button style={btnStyle(G.gold)} onClick={()=>setRec(RECS.celtic_marked)}>✅ Yes, Hunter's Mark is active!</button>
+              <button style={btnStyle(G.dim)}  onClick={()=>setRec(RECS.celtic_mark_first)}>❌ Not yet</button>
+            </>}
+
+            <button onClick={onClose} style={{width:'100%',marginTop:8,padding:14,background:'transparent',border:`1px solid ${G.border}`,color:G.dim,borderRadius:12,cursor:'pointer',fontFamily:fB,fontSize:15}}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <div style={{color:G.gold,fontFamily:fH,fontSize:15,marginBottom:20}}>⚡ Kalorian Should…</div>
+            <div style={{background:G.bg,border:`2px solid ${chosen.col}`,borderRadius:16,padding:22,marginBottom:20}}>
+              <div style={{fontSize:48,marginBottom:10}}>{chosen.emoji}</div>
+              <div style={{color:G.cream,fontFamily:fH,fontSize:20}}>{rec.title}</div>
+              <div style={{display:'inline-block',background:chosen.col+'22',border:`1px solid ${chosen.col}`,color:chosen.col,fontFamily:fB,fontSize:11,padding:'4px 14px',borderRadius:99,marginTop:8}}>{chosen.tag}</div>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:16,lineHeight:1.8,marginTop:16}}>{rec.why}</div>
+            </div>
+            <div style={{display:'flex',gap:12}}>
+              <button onClick={()=>{setStep('q1');setRec(null);}} style={{flex:1,padding:15,background:G.cardHi,border:`1px solid ${G.border}`,color:G.cream,borderRadius:12,cursor:'pointer',fontFamily:fB,fontSize:16}}>← Ask Again</button>
+              <button onClick={onClose} style={{flex:2,padding:15,background:G.gold,border:'none',color:G.bg,borderRadius:12,cursor:'pointer',fontFamily:fH,fontSize:16,fontWeight:700}}>Got it! ✓</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── ACTION DETAIL MODAL ───────────────────────────────────── */
+function ActionModal({ action, onClose }) {
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100,padding:20}}>
+      <div className="fade-up" style={{background:G.card,border:`2px solid ${action.col}`,borderRadius:24,padding:28,maxWidth:540,width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
+
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:22}}>
+          <div>
+            <div style={{fontSize:52}}>{action.emoji}</div>
+            <div style={{color:G.cream,fontFamily:fH,fontSize:22,marginTop:10}}>{action.name}</div>
+            <div style={{display:'inline-block',background:action.col+'22',border:`1px solid ${action.col}`,color:action.col,fontFamily:fB,fontSize:11,padding:'4px 14px',borderRadius:99,marginTop:8}}>{action.tag}</div>
+          </div>
+          <button onClick={onClose} style={{background:G.border,border:'none',color:G.cream,borderRadius:10,padding:'10px 16px',cursor:'pointer',fontSize:20,minWidth:48,minHeight:48}}>✕</button>
+        </div>
+
+        <InfoBox color={G.gold} label="📍 When to use this" text={action.when}/>
+        <InfoBox color={G.wolf} label="💬 Say to Dad" text={action.say} italic/>
+
+        <div style={{marginBottom:20}}>
+          {action.steps.map((s,i)=>(
+            <div key={i} style={{display:'flex',gap:16,marginBottom:16}}>
+              <div style={{width:36,height:36,minWidth:36,background:G.gold,borderRadius:99,display:'flex',alignItems:'center',justifyContent:'center',color:G.bg,fontFamily:fH,fontSize:15,fontWeight:900}}>{i+1}</div>
+              <div style={{paddingTop:4}}>
+                <div style={{color:G.gold,fontFamily:fB,fontSize:14,fontWeight:700}}>{s.n}</div>
+                <div style={{color:G.cream,fontFamily:fB,fontSize:15,lineHeight:1.7,marginTop:4}}>{s.d}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{background:'#142810',border:`1px solid #2a5020`,borderRadius:12,padding:'14px 16px',marginBottom:22}}>
+          <div style={{color:G.green,fontFamily:fB,fontSize:13,fontWeight:700}}>💡 Kalorian's Tip</div>
+          <div style={{color:G.cream,fontFamily:fB,fontSize:15,lineHeight:1.7,marginTop:6}}>{action.tip}</div>
+        </div>
+
+        <button onClick={onClose} style={{width:'100%',padding:18,background:G.gold,border:'none',color:G.bg,borderRadius:14,cursor:'pointer',fontFamily:fH,fontSize:17,fontWeight:700}}>
+          Let's go! ⚔️
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── WELCOME PAGE ──────────────────────────────────────────── */
+function WelcomePage({ onBegin }) {
+  const cards = [
+    { emoji:'🧭', title:'Who is Kalorian?',
+      text:'A fearless human Ranger who has traveled wild lands and ancient ruins in search of mystery. He\'s fast, deadly with a bow, and can befriend almost any creature. Level 10 — a true expert.' },
+    { emoji:'🐺', title:'Who is Celtic?',
+      text:'Kalorian\'s Dire Wolf companion — enormous, lightning-fast, and completely loyal. Celtic fights alongside Kalorian, knocks enemies flat with his bite, and always senses danger first.' },
+    { emoji:'🎮', title:'How Do You Play?',
+      text:"On your turn: fire your bow, send Celtic to attack, or cast a spell. Tap 'What Should I Do?' if you're unsure — it guides you step by step. Tell Dad your action, roll the dice, have an adventure!" },
+  ];
+  return (
+    <div style={{minHeight:'100vh',background:G.bg,padding:'32px 20px 48px'}}>
+      {/* Stars */}
+      <div style={{position:'fixed',inset:0,overflow:'hidden',pointerEvents:'none',zIndex:0}}>
+        {Array.from({length:28}).map((_,i)=>(
+          <div key={i} style={{position:'absolute',width:i%4===0?3:2,height:i%4===0?3:2,
+            borderRadius:'50%',background:G.gold,opacity:.06+(i%5)*.04,
+            top:`${(i*41)%100}%`,left:`${(i*67)%100}%`,
+            animation:`pulse ${2+(i%3)}s ease-in-out infinite`,animationDelay:`${i*.25}s`}}/>
+        ))}
+      </div>
+
+      <div style={{maxWidth:580,margin:'0 auto',position:'relative',zIndex:1}}>
+
+        {/* Hero */}
+        <div className="fade-up" style={{textAlign:'center',marginBottom:32}}>
+          <div className="bounce" style={{fontSize:96,lineHeight:1}}>🐺</div>
+          <h1 style={{fontFamily:fH,color:G.gold,fontSize:34,lineHeight:1.2,marginTop:22,textShadow:`0 0 50px ${G.gold}45`}}>
+            Kalorian
+          </h1>
+          <div style={{color:G.cream,fontFamily:fH,fontSize:22,marginTop:6}}>&amp; Celtic</div>
+          <div style={{display:'inline-block',background:G.card,border:`1px solid ${G.wolf}`,color:G.wolf,fontFamily:fB,fontSize:13,padding:'7px 22px',borderRadius:99,marginTop:16,letterSpacing:2}}>
+            BEAST MASTER RANGER • LEVEL 10
+          </div>
+        </div>
+
+        {/* Story */}
+        <div className="fade-up" style={{animationDelay:'.1s',background:G.card,border:`1px solid ${G.border}`,borderLeft:`4px solid ${G.gold}`,borderRadius:16,padding:'22px 24px',marginBottom:24}}>
+          <p style={{color:G.cream,fontFamily:fB,fontSize:16,lineHeight:1.9}}>
+            <em style={{color:G.gold}}>Kalorian has always followed the wild places</em> — ancient ruins, forgotten forests, mysteries the maps don't show. He never travels alone. Celtic, his Dire Wolf, has been at his side since they were both young.
+          </p>
+          <p style={{color:G.cream,fontFamily:fB,fontSize:16,lineHeight:1.9,marginTop:14}}>
+            Today, they enter <em style={{color:G.goldHi}}>Nythalara</em> — a city that rose from the sea, still lit from within, still running, as if no time has passed at all. The biggest mystery Kalorian has ever faced. And he wouldn't have it any other way.
+          </p>
+        </div>
+
+        {/* Info Cards */}
+        {cards.map((c,i)=>(
+          <div key={i} className="fade-up" style={{animationDelay:`${.2+i*.1}s`,background:G.card,border:`1px solid ${G.border}`,borderRadius:16,padding:'20px 22px',display:'flex',gap:18,marginBottom:14}}>
+            <div style={{fontSize:38,flexShrink:0}}>{c.emoji}</div>
+            <div>
+              <div style={{color:G.gold,fontFamily:fH,fontSize:14,marginBottom:8}}>{c.title}</div>
+              <div style={{color:G.cream,fontFamily:fB,fontSize:15,lineHeight:1.8}}>{c.text}</div>
+            </div>
+          </div>
+        ))}
+
+        {/* Quick Stats */}
+        <div className="fade-up" style={{animationDelay:'.5s',background:G.card,border:`1px solid ${G.border}`,borderRadius:16,padding:'18px 20px',marginBottom:28}}>
+          <div style={{color:G.dim,fontFamily:fB,fontSize:11,textTransform:'uppercase',letterSpacing:2,marginBottom:14}}>⚡ Quick Stats</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+            {[{v:'85',l:'Kalorian HP',c:G.green},{v:'45',l:'Celtic HP',c:G.wolf},{v:'16',l:'Armor (AC)'},
+              {v:'+8',l:'Bow Attack',c:G.red},{v:'d8+4',l:'Arrow Dmg',c:G.red},{v:'+5',l:'Celtic Bite',c:G.wolf}]
+              .map((s,i)=>(
+              <div key={i} style={{background:G.bg,borderRadius:10,padding:'12px 8px',textAlign:'center'}}>
+                <div style={{color:s.c||G.gold,fontFamily:fH,fontSize:20}}>{s.v}</div>
+                <div style={{color:G.dim,fontFamily:fB,fontSize:11,marginTop:4}}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Begin */}
+        <div className="fade-up" style={{animationDelay:'.6s'}}>
+          <button className="glow-btn" onClick={onBegin} style={{
+            width:'100%',padding:'24px 0',
+            background:`linear-gradient(135deg,${G.gold},${G.goldHi})`,
+            border:'none',color:G.bg,borderRadius:18,cursor:'pointer',
+            fontFamily:fH,fontSize:21,fontWeight:900
+          }}>⚔️  Begin the Adventure  ⚔️</button>
+          <div style={{color:G.dim,fontFamily:fB,fontSize:14,textAlign:'center',marginTop:12}}>Kalorian & Celtic are ready.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── CHARACTER SHEET ───────────────────────────────────────── */
+function SheetPage({ onBack }) {
+  const [kHP,    setKHP]    = useState(K_MAX);
+  const [cHP,    setCHP]    = useState(C_MAX);
+  const [slots,  setSlots]  = useState([...SL_MAX]);
+  const [markOn, setMarkOn] = useState(false);
+  const [showRec,   setShowRec]   = useState(false);
+  const [activeAct, setActiveAct] = useState(null);
+
+  const longRest  = () => { setKHP(K_MAX); setCHP(C_MAX); setSlots([...SL_MAX]); setMarkOn(false); };
+  const shortRest = () => {
+    const d10 = () => Math.ceil(Math.random()*10);
+    setKHP(h => Math.min(K_MAX, h+d10()+3));
+    setCHP(h => Math.min(C_MAX, h+d10()+2));
+  };
+
+  return (
+    <div style={{minHeight:'100vh',background:G.bg}}>
+      {/* Header */}
+      <div style={{background:G.card,borderBottom:`1px solid ${G.border}`,padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:10}}>
+        <button onClick={onBack} style={{background:'transparent',border:`1px solid ${G.border}`,color:G.dim,borderRadius:10,padding:'10px 16px',cursor:'pointer',fontFamily:fB,fontSize:15,minHeight:48}}>← Back</button>
+        <div style={{textAlign:'center'}}>
+          <div style={{color:G.gold,fontFamily:fH,fontSize:16}}>Kalorian & Celtic</div>
+          <div style={{color:G.dim,fontFamily:fB,fontSize:10,letterSpacing:1}}>BEAST MASTER • LVL 10</div>
+        </div>
+        <div style={{fontSize:30}}>🐺</div>
+      </div>
+
+      <div style={{maxWidth:580,margin:'0 auto',padding:'20px 20px 48px'}}>
+
+        {/* HP Trackers */}
+        <div style={{marginBottom:14}}>
+          <HPTracker label="Kalorian" emoji="🧭" current={kHP} max={K_MAX} color={G.green} onSet={setKHP}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <HPTracker label="Celtic — Dire Wolf" emoji="🐺" current={cHP} max={C_MAX} color={G.wolf} onSet={setCHP}/>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:'flex',gap:10,marginBottom:10}}>
+          <StatBadge label="Armor (AC)" value="16"/>
+          <StatBadge label="Bow Attack" value="+8" sub="d20 + 8 to hit" color={G.red}/>
+          <StatBadge label="Arrow Damage" value="d8+4" color={G.red}/>
+        </div>
+        <div style={{display:'flex',gap:10,marginBottom:14}}>
+          <StatBadge label="Celtic Speed" value="50 ft" color={G.wolf}/>
+          <StatBadge label="Celtic Attack" value="+5" sub="d20 + 5 to hit" color={G.wolf}/>
+          <StatBadge label="Celtic Damage" value="2d6+3" color={G.wolf}/>
+        </div>
+
+        {/* Hunter's Mark Toggle */}
+        <button onClick={()=>setMarkOn(m=>!m)} style={{
+          width:'100%',background:markOn?'#162a08':G.card,
+          border:`2px solid ${markOn?G.gold:G.border}`,
+          borderRadius:16,padding:'18px 20px',cursor:'pointer',textAlign:'left',
+          display:'flex',alignItems:'center',gap:16,transition:'all .2s',marginBottom:14,minHeight:76
+        }}>
+          <div style={{fontSize:34}}>🎯</div>
+          <div>
+            <div style={{color:markOn?G.gold:G.cream,fontFamily:fH,fontSize:16}}>
+              Hunter's Mark {markOn?'— ACTIVE ✓':'— Off'}
+            </div>
+            <div style={{color:G.dim,fontFamily:fB,fontSize:13,marginTop:4}}>
+              {markOn?'+d6 damage on every hit to the marked enemy!':'Tap to track when this spell is active in the game'}
+            </div>
+          </div>
+        </button>
+
+        {/* Spell Slots */}
+        <div style={{marginBottom:14}}>
+          <SpellSlots slots={slots} onChange={setSlots}/>
+        </div>
+
+        {/* Your Turn */}
+        <div style={{background:G.card,border:`2px solid ${G.gold}`,borderRadius:16,padding:'20px 20px',marginBottom:14}}>
+          <div style={{color:G.gold,fontFamily:fH,fontSize:15,marginBottom:18}}>⚡ Your Turn</div>
+          <button onClick={()=>setShowRec(true)} style={{
+            width:'100%',padding:'20px 0',marginBottom:18,
+            background:`linear-gradient(135deg,${G.gold}22,${G.goldHi}12)`,
+            border:`2px solid ${G.gold}`,color:G.gold,
+            borderRadius:14,cursor:'pointer',fontFamily:fH,fontSize:19,fontWeight:700
+          }}>🎲 What Should I Do?</button>
+
+          <div style={{color:G.dim,fontFamily:fB,fontSize:12,textTransform:'uppercase',letterSpacing:1,marginBottom:12}}>Or pick any action:</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {ACTIONS.map(a=>(
+              <button key={a.id} onClick={()=>setActiveAct(a)} style={{
+                background:G.bg,border:`1px solid ${G.border}`,
+                borderRadius:12,padding:'15px 12px',cursor:'pointer',
+                display:'flex',alignItems:'center',gap:10,minHeight:58,textAlign:'left',
+                transition:'border-color .15s'
+              }}
+                onTouchStart={e=>e.currentTarget.style.borderColor=a.col}
+                onTouchEnd={e=>e.currentTarget.style.borderColor=G.border}
+              >
+                <span style={{fontSize:24}}>{a.emoji}</span>
+                <span style={{color:G.cream,fontFamily:fB,fontSize:13,lineHeight:1.4}}>{a.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Celtic Reference */}
+        <div style={{background:G.card,border:`1px solid ${G.wolfDim}`,borderRadius:16,padding:'18px 20px',marginBottom:14}}>
+          <div style={{color:G.wolf,fontFamily:fH,fontSize:14,marginBottom:14}}>🐺 Celtic — Combat Reference</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:14}}>
+            {[{l:'HP',v:`${cHP}/${C_MAX}`,c:cHP<15?G.red:G.wolf},{l:'Armor',v:'14'},{l:'Speed',v:'50 ft'},
+              {l:'To Hit',v:'+5'},{l:'Damage',v:'2d6+3'},{l:'Knock DC',v:'13 STR'}]
+              .map((s,i)=>(
+              <div key={i} style={{background:G.bg,borderRadius:8,padding:'10px 8px',textAlign:'center'}}>
+                <div style={{color:G.dim,fontFamily:fB,fontSize:10,textTransform:'uppercase',letterSpacing:1}}>{s.l}</div>
+                <div style={{color:s.c||G.cream,fontFamily:fH,fontSize:18,marginTop:4}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{background:'#0a2020',borderRadius:10,padding:'13px 14px',borderLeft:`3px solid ${G.wolf}`}}>
+            <div style={{color:G.wolf,fontFamily:fB,fontSize:14,fontWeight:700}}>🐾 Pack Tactics</div>
+            <div style={{color:G.cream,fontFamily:fB,fontSize:15,marginTop:6,lineHeight:1.7}}>
+              When Kalorian stands next to Celtic's target, Celtic rolls TWICE and takes the better number to attack!
+            </div>
+          </div>
+        </div>
+
+        {/* Rest Buttons */}
+        <div style={{display:'flex',gap:12}}>
+          <button onClick={shortRest} style={{flex:1,padding:'18px 0',minHeight:68,background:G.card,border:`1px solid ${G.border}`,color:G.cream,borderRadius:14,cursor:'pointer',fontFamily:fB,fontSize:16}}>
+            🌙 Short Rest<br/><span style={{color:G.dim,fontSize:13}}>Recover some HP</span>
+          </button>
+          <button onClick={longRest} style={{flex:1,padding:'18px 0',minHeight:68,background:'#0e2a18',border:`1px solid #2a6a38`,color:G.green,borderRadius:14,cursor:'pointer',fontFamily:fB,fontSize:16}}>
+            ☀️ Long Rest<br/><span style={{color:G.dim,fontSize:13}}>Full HP + all spells</span>
+          </button>
+        </div>
+      </div>
+
+      {showRec   && <RecommendEngine cHP={cHP} onClose={()=>setShowRec(false)}/>}
+      {activeAct && <ActionModal action={activeAct} onClose={()=>setActiveAct(null)}/>}
+    </div>
+  );
+}
+
+/* ── ROOT ──────────────────────────────────────────────────── */
+function App() {
+  useEffect(()=>{
+    document.getElementById('loading').style.display='none';
+    document.getElementById('root').style.display='block';
+  },[]);
+  const [page,setPage] = useState('welcome');
+  return page==='welcome'
+    ? <WelcomePage onBegin={()=>setPage('sheet')}/>
+    : <SheetPage   onBack={()=>setPage('welcome')}/>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
