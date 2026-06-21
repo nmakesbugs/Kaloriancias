@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Kalorian & Celtic — Beast Master</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0b1a0b; overflow-x: hidden; }
+    body { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes pulse   { 0%,100% { opacity:.8; } 50% { opacity:.25; } }
+    @keyframes bounce  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-14px); } }
+    @keyframes glow    { 0%,100% { box-shadow:0 4px 24px rgba(212,168,78,.35); } 50% { box-shadow:0 4px 48px rgba(212,168,78,.7); } }
+
+    .fade-up  { animation: fadeUp .5s ease both; }
+    .bounce   { animation: bounce 3s ease-in-out infinite; display:inline-block; }
+    .glow-btn { animation: glow 2.5s ease-in-out infinite; }
+
+    ::-webkit-scrollbar       { width:4px; }
+    ::-webkit-scrollbar-track { background:#0b1a0b; }
+    ::-webkit-scrollbar-thumb { background:#264026; border-radius:4px; }
+
+    #loading {
+      position:fixed; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:20px;
+      background:#0b1a0b; color:#d4a84e;
+      font-family:'Lora',Georgia,serif; font-size:18px;
+    }
+    #loading .w { font-size:64px; animation:bounce 1.5s ease-in-out infinite; }
+    #root { display:none; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="w">🐺</div>
+  <div>Kalorian &amp; Celtic are getting ready…</div>
+</div>
+<div id="root"></div>
+
+<script type="text/javascript">
+const {
+  useState,
+  useEffect
+} = React;
+const K_MAX = 101;
+const C_MAX = 45;
+const SL_MAX = [4, 3, 3];
+const G = {
+  bg: '#0b1a0b',
+  card: '#122012',
+  cardHi: '#1a301a',
+  border: '#264026',
+  gold: '#d4a84e',
+  goldHi: '#f0c870',
+  cream: '#ede0c4',
+  dim: '#8a7a5a',
+  red: '#c84040',
+  redHi: '#ff7070',
+  green: '#4aaa66',
+  wolf: '#60b8b8',
+  wolfDim: '#3a8080',
+  purple: '#b06ec8'
+};
+const fH = "'Cinzel Decorative',serif";
+const fB = "'Lora',serif";
+const ACTIONS = [{
+  id: 'bow',
+  emoji: '🏹',
+  name: 'Shoot My Bow',
+  tag: 'ATTACK',
+  col: G.red,
+  when: 'Enemy is any distance away',
+  say: '"Kalorian fires two arrows at [enemy]!"',
+  steps: [{
+    n: 'Arrow 1',
+    d: 'Roll d20 + 9. If it beats their armor → HIT! Roll d8 + 5 for damage.'
+  }, {
+    n: 'Arrow 2',
+    d: 'Roll again! Same — d20 + 9 to hit, d8 + 5 damage.'
+  }, {
+    n: "Hunter's Mark?",
+    d: "If Hunter's Mark is on this enemy → add +d6 to EACH hit! 🎯"
+  }],
+  tip: "You ALWAYS get two arrows every single turn. Always shoot both!"
+}, {
+  id: 'celtic',
+  emoji: '🐺',
+  name: 'Send Celtic!',
+  tag: 'ATTACK',
+  col: G.wolf,
+  when: 'An enemy is close and Celtic has good HP',
+  say: '"Celtic — attack!"',
+  steps: [{
+    n: 'Celtic Bites TWICE!',
+    d: 'Celtic now attacks TWO times! For each bite: roll d20 + 5. Each hit → roll 2d6 + 3 damage.'
+  }, {
+    n: 'Knock Down!',
+    d: 'Any enemy Celtic hits rolls d20. If they get 12 or lower → they FALL DOWN! Next attack on them has advantage.'
+  }, {
+    n: 'Pack Tactics',
+    d: 'If Kalorian is next to the SAME enemy → Celtic rolls twice on EACH bite and takes the better number! 🎲🎲'
+  }],
+  tip: "Bestial Fury means TWO bites every time — and Hunter's Mark adds +d6 to each hit. Stay next to the target for Pack Tactics!"
+}, {
+  id: 'mark',
+  emoji: '🎯',
+  name: "Hunter's Mark",
+  tag: 'SPELL • 1st Level',
+  col: G.gold,
+  when: 'Start of combat — do this BEFORE shooting',
+  say: '"Kalorian marks [enemy] with Hunter\'s Mark!"',
+  steps: [{
+    n: 'Use a Spell Slot',
+    d: 'Tap one gold ⭐ dot to mark it used.'
+  }, {
+    n: 'Pick Your Target',
+    d: 'Every hit on that enemy adds +d6 extra damage — from bow OR Celtic!'
+  }, {
+    n: 'Move the Mark',
+    d: 'If they go down, move Hunter\'s Mark to a new enemy as a bonus action.'
+  }],
+  tip: "Do this first, before attacking. Every single hit hits harder all fight!"
+}, {
+  id: 'cure',
+  emoji: '💚',
+  name: 'Cure Wounds',
+  tag: 'SPELL • 1st Level',
+  col: G.green,
+  when: 'Someone is badly hurt and needs HP back',
+  say: '"Kalorian heals [person]!"',
+  steps: [{
+    n: 'Use a Spell Slot',
+    d: 'Tap one gold ⭐ dot to mark it used.'
+  }, {
+    n: 'Roll Healing',
+    d: 'Roll 1d8 + 3. That\'s how many HP come back!'
+  }, {
+    n: 'Touch Required',
+    d: 'Kalorian must be right next to the person to heal them.'
+  }],
+  tip: "Save this for real emergencies. Heal Celtic first if he's almost down!"
+}, {
+  id: 'trace',
+  emoji: '🌫️',
+  name: 'Pass Without Trace',
+  tag: 'SPELL • 2nd Level',
+  col: G.wolf,
+  when: 'The whole party needs to sneak somewhere',
+  say: '"Kalorian casts Pass Without Trace!"',
+  steps: [{
+    n: 'Use a 2nd Level Slot',
+    d: 'Tap one blue 💫 dot to mark it used.'
+  }, {
+    n: 'Everyone Sneaks!',
+    d: 'The whole party gets +10 to stealth rolls for 1 hour. That\'s huge!'
+  }, {
+    n: 'Stay Together',
+    d: 'Party must stay near Kalorian for it to keep working.'
+  }],
+  tip: "+10 to sneaking is massive. Great before ambushing enemies!"
+}, {
+  id: 'water',
+  emoji: '🌊',
+  name: 'Water Walk',
+  tag: 'SPELL • 3rd Level',
+  col: G.wolf,
+  when: 'You need to cross water, deep mud, or the flooded streets of Nythalara',
+  say: '"Kalorian casts Water Walk!"',
+  steps: [{
+    n: 'Use a 3rd Level Slot',
+    d: 'Tap one 🌟 third-level dot to mark it used.'
+  }, {
+    n: 'Walk on Water!',
+    d: 'You and up to 10 friends walk on TOP of water, mud, even lava — like solid ground! Lasts 1 hour.'
+  }, {
+    n: 'Perfect for Nythalara',
+    d: 'The sea-city is full of water. The whole party can cross anything without swimming.'
+  }],
+  tip: "No more swimming or sinking. Great for a city that rose out of the sea!"
+}, {
+  id: 'conjure',
+  emoji: '🐾',
+  name: 'Conjure Animals',
+  tag: 'SPELL • 3rd Level',
+  col: G.green,
+  when: 'There are lots of enemies, or you want extra fighters on your side',
+  say: '"Kalorian conjures wild animals to fight!"',
+  steps: [{
+    n: 'Use a 3rd Level Slot',
+    d: 'Tap one 🌟 third-level dot to mark it used.'
+  }, {
+    n: 'Summon the Pack',
+    d: 'A group of wild animals appears to fight for you! Dad helps pick what shows up — wolves, giant eagles, and more.'
+  }, {
+    n: 'They Fight With You',
+    d: 'Your animals attack the enemies on your turn, right alongside you and Celtic!'
+  }],
+  tip: "Amazing when you're outnumbered. Suddenly YOUR side has more fighters!"
+}, {
+  id: 'elemental',
+  emoji: '🌋',
+  name: 'Summon Elemental',
+  tag: 'MAGIC ITEM • 1/Long Rest',
+  col: G.purple,
+  when: 'A really tough fight — you need a powerful ally fast',
+  say: '"Kalorian uses the Elemental Stone!"',
+  steps: [{
+    n: 'Use the Magic Item',
+    d: 'Tap the 🌋 Elemental Stone on your sheet. You can only use it ONCE before you need a Long Rest!'
+  }, {
+    n: 'Summon an Elemental',
+    d: 'A powerful elemental — fire, water, earth, or air — appears and fights for you for up to 1 hour!'
+  }, {
+    n: 'No Spell Slot Needed',
+    d: 'This comes from your magic item, not your spells — so it does NOT use a 🌟 dot.'
+  }],
+  tip: "Save this for the BIGGEST, scariest fights. You only get one until you rest!"
+}, {
+  id: 'help',
+  emoji: '🤝',
+  name: 'Help a Friend',
+  tag: 'ACTION',
+  col: G.cream,
+  when: 'A friend really needs to succeed at something important',
+  say: '"Kalorian helps [friend]!"',
+  steps: [{
+    n: 'No Roll',
+    d: 'Just tell Dad you\'re helping your friend.'
+  }, {
+    n: 'Friend Rolls Twice',
+    d: 'They roll their dice twice and take the better number!'
+  }, {
+    n: 'Works on Attacks',
+    d: 'Help a friend attack — they roll to hit twice!'
+  }],
+  tip: "Great when a teammate absolutely cannot afford to fail."
+}, {
+  id: 'search',
+  emoji: '👁️',
+  name: 'Look Around',
+  tag: 'ACTION',
+  col: G.dim,
+  when: 'You want to find hidden things, enemies, or clues',
+  say: '"Kalorian searches the area!"',
+  steps: [{
+    n: 'Roll Perception',
+    d: 'Roll d20 + 7. Higher = more you notice. Dad tells you what you find!'
+  }, {
+    n: 'Celtic Helps',
+    d: 'Say "Celtic sniffs around too" — you might get extra clues!'
+  }, {
+    n: 'Ranger Senses',
+    d: 'Kalorian notices things others miss, especially in the wild.'
+  }],
+  tip: "Describe Celtic sniffing the air or pawing the ground. Dad loves roleplaying that!"
+}, {
+  id: 'dodge',
+  emoji: '🛡️',
+  name: 'Dodge & Survive',
+  tag: 'ACTION',
+  col: '#8888cc',
+  when: 'Kalorian is being hit a lot and HP is getting low',
+  say: '"Kalorian dodges!"',
+  steps: [{
+    n: 'Dodge Action',
+    d: 'Enemies trying to hit Kalorian must roll twice and take the LOWER number.'
+  }, {
+    n: 'No Shooting',
+    d: 'Kalorian doesn\'t attack this turn — but Celtic still can!'
+  }, {
+    n: 'Stay Alive!',
+    d: 'If Kalorian is under 30 HP, dodging might save your life.'
+  }],
+  tip: "Let Celtic do the fighting while Kalorian survives. You're a TEAM!"
+}];
+function HPBar({
+  current,
+  max,
+  color
+}) {
+  const pct = Math.max(0, current / max * 100);
+  const bar = pct > 50 ? color : pct > 25 ? '#cc8822' : G.red;
+  return React.createElement("div", {
+    style: {
+      background: G.border,
+      borderRadius: 99,
+      height: 12,
+      overflow: 'hidden',
+      marginTop: 8
+    }
+  }, React.createElement("div", {
+    style: {
+      width: `${pct}%`,
+      height: '100%',
+      background: bar,
+      borderRadius: 99,
+      transition: 'width .4s ease,background .3s'
+    }
+  }));
+}
+function HPTracker({
+  label,
+  emoji,
+  current,
+  max,
+  color,
+  onSet
+}) {
+  const adj = d => onSet(Math.max(0, Math.min(max, current + d)));
+  const isDead = current === 0,
+    low = current < max * .3;
+  return React.createElement("div", {
+    style: {
+      background: G.card,
+      border: `1px solid ${isDead ? G.red : low ? '#7a3810' : G.border}`,
+      borderRadius: 16,
+      padding: '18px 20px',
+      transition: 'border-color .3s'
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 11,
+      textTransform: 'uppercase',
+      letterSpacing: 2
+    }
+  }, emoji, " ", label), React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: 8,
+      marginTop: 6
+    }
+  }, React.createElement("span", {
+    style: {
+      color: isDead ? G.red : low ? '#ff9944' : G.cream,
+      fontFamily: fH,
+      fontSize: 38,
+      lineHeight: 1
+    }
+  }, current), React.createElement("span", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 16
+    }
+  }, "/ ", max), isDead && React.createElement("span", {
+    style: {
+      color: G.red,
+      fontFamily: fB,
+      fontSize: 14
+    }
+  }, "\uD83D\uDC80 Down!"), !isDead && low && React.createElement("span", {
+    style: {
+      color: '#ff9944',
+      fontFamily: fB,
+      fontSize: 13
+    }
+  }, "\u26A0\uFE0F Low!")), React.createElement(HPBar, {
+    current: current,
+    max: max,
+    color: color
+  }), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 14
+    }
+  }, [[-10, '−10'], [-1, '−1'], [1, '+1'], [10, '+10']].map(([d, lbl]) => React.createElement("button", {
+    key: d,
+    onClick: () => adj(d),
+    style: {
+      flex: 1,
+      padding: '11px 0',
+      minHeight: 48,
+      background: d < 0 ? '#2e0e0e' : '#0e2e18',
+      border: `1px solid ${d < 0 ? '#6a2020' : '#1a6a30'}`,
+      color: d < 0 ? G.redHi : G.green,
+      borderRadius: 10,
+      cursor: 'pointer',
+      fontSize: 15,
+      fontWeight: 700,
+      fontFamily: fB
+    }
+  }, lbl))));
+}
+function SpellSlots({
+  slots,
+  onChange
+}) {
+  const colors = [G.gold, G.wolf, G.purple];
+  const labels = ['1st Level Spells', '2nd Level Spells', '3rd Level Spells'];
+  const emojis = ['⭐', '💫', '🌟'];
+  const use = i => {
+    if (slots[i] > 0) {
+      const n = [...slots];
+      n[i]--;
+      onChange(n);
+    }
+  };
+  const restore = i => {
+    if (slots[i] < SL_MAX[i]) {
+      const n = [...slots];
+      n[i]++;
+      onChange(n);
+    }
+  };
+  return React.createElement("div", {
+    style: {
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      borderRadius: 16,
+      padding: '18px 20px'
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 13,
+      marginBottom: 18
+    }
+  }, "\u2728 Spell Slots"), labels.map((lbl, i) => React.createElement("div", {
+    key: i,
+    style: {
+      marginBottom: i < 2 ? 16 : 0
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      marginBottom: 8
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 12
+    }
+  }, emojis[i], " ", lbl), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 11
+    }
+  }, slots[i], " / ", SL_MAX[i], " left")), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10
+    }
+  }, Array.from({
+    length: SL_MAX[i]
+  }).map((_, j) => {
+    const avail = j < slots[i];
+    return React.createElement("button", {
+      key: j,
+      onClick: () => avail ? use(i) : restore(i),
+      title: avail ? 'Tap to use this slot' : 'Tap to restore this slot',
+      style: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        border: `2px solid ${colors[i]}`,
+        background: avail ? colors[i] : 'transparent',
+        cursor: 'pointer',
+        transition: 'all .2s'
+      }
+    });
+  })))), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 11,
+      marginTop: 14
+    }
+  }, "Filled = available. Tap to use. Tap empty to restore. Long Rest fills all."));
+}
+function StatBadge({
+  label,
+  value,
+  sub,
+  color
+}) {
+  return React.createElement("div", {
+    style: {
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      borderRadius: 12,
+      padding: '14px 10px',
+      textAlign: 'center',
+      flex: 1
+    }
+  }, React.createElement("div", {
+    style: {
+      color: color || G.gold,
+      fontFamily: fH,
+      fontSize: 22
+    }
+  }, value), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 12,
+      marginTop: 4
+    }
+  }, label), sub && React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 10,
+      marginTop: 3
+    }
+  }, sub));
+}
+function InfoBox({
+  color,
+  label,
+  text,
+  italic
+}) {
+  return React.createElement("div", {
+    style: {
+      background: G.bg,
+      borderRadius: 12,
+      padding: '12px 16px',
+      marginBottom: 16,
+      borderLeft: `4px solid ${color}`
+    }
+  }, React.createElement("div", {
+    style: {
+      color,
+      fontFamily: fB,
+      fontSize: 12,
+      textTransform: 'uppercase',
+      letterSpacing: 1
+    }
+  }, label), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 15,
+      marginTop: 6,
+      fontStyle: italic ? 'italic' : 'normal',
+      lineHeight: 1.6
+    }
+  }, text));
+}
+function RecommendEngine({
+  cHP,
+  onClose
+}) {
+  const [step, setStep] = useState('q1');
+  const [rec, setRec] = useState(null);
+  const RECS = {
+    search: {
+      action: 'search',
+      title: 'Look Around with Celtic!',
+      why: "No enemies yet — use Kalorian's sharp eyes and Celtic's nose to explore safely. Celtic might sense danger before you can see it!"
+    },
+    bow_marked: {
+      action: 'bow',
+      title: 'Shoot Your Bow! 🏹',
+      why: "Hunter's Mark is active — fire both arrows and add +d6 to every hit. Stay at range and let the arrows do the work!"
+    },
+    bow_mark_first: {
+      action: 'mark',
+      title: "Hunter's Mark, Then Shoot!",
+      why: "Spend your bonus action to put Hunter's Mark on the enemy, THEN fire both arrows. That +d6 on every hit adds up so fast!"
+    },
+    celtic_marked: {
+      action: 'celtic',
+      title: 'Send Celtic In! 🐺',
+      why: "You're both close — Pack Tactics activates! Celtic rolls twice to hit. Hunter's Mark adds +d6 to the bite too. This is your most powerful combo!"
+    },
+    celtic_mark_first: {
+      action: 'celtic',
+      title: "Hunter's Mark, Then Celtic!",
+      why: "Use Hunter's Mark as a bonus action first, then send Celtic. Stay next to the same enemy so Celtic gets Pack Tactics. Roll twice, take the better — deadly!"
+    },
+    protect: {
+      action: 'dodge',
+      title: 'Protect Kalorian & Celtic 🛡️',
+      why: "Celtic is hurting — keep them safe! Kalorian dodges to avoid damage this turn. Consider healing Celtic with Cure Wounds if it gets worse."
+    },
+    swarm: {
+      action: 'conjure',
+      title: 'Conjure Animals! 🐾',
+      why: "There are LOTS of enemies — summon a pack of wild animals to even the odds. Use a 🌟 3rd-level slot, and Dad helps pick the animals. Now your side has more fighters too!"
+    }
+  };
+  const btnStyle = col => ({
+    width: '100%',
+    padding: '16px 14px',
+    minHeight: 58,
+    background: col ? col + '18' : G.cardHi,
+    border: `1px solid ${col || G.border}`,
+    color: G.cream,
+    borderRadius: 14,
+    cursor: 'pointer',
+    fontFamily: fB,
+    fontSize: 17,
+    fontWeight: 700,
+    lineHeight: 1.3,
+    marginBottom: 12,
+    textAlign: 'center'
+  });
+  const chosen = rec ? ACTIONS.find(a => a.id === rec.action) : null;
+  return React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,.88)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+      padding: 20
+    }
+  }, React.createElement("div", {
+    className: "fade-up",
+    style: {
+      background: G.card,
+      border: `2px solid ${G.gold}`,
+      borderRadius: 24,
+      padding: 28,
+      maxWidth: 540,
+      width: '100%',
+      maxHeight: '90vh',
+      overflowY: 'auto'
+    }
+  }, !rec ? React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 16,
+      marginBottom: 24
+    }
+  }, "\uD83C\uDFB2 What Should I Do?"), step === 'q1' && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 18,
+      lineHeight: 1.7,
+      marginBottom: 20
+    }
+  }, "Is there an enemy in the fight?"), React.createElement("button", {
+    style: btnStyle(G.red),
+    onClick: () => setStep('q2_close')
+  }, "\u2694\uFE0F Yes \u2014 close by!"), React.createElement("button", {
+    style: btnStyle('#4444aa'),
+    onClick: () => setStep('q2_far')
+  }, "\uD83C\uDFF9 Yes \u2014 far away!"), React.createElement("button", {
+    style: btnStyle(G.green),
+    onClick: () => setRec(RECS.swarm)
+  }, "\uD83D\uDC3E Yes \u2014 LOTS of them!"), React.createElement("button", {
+    style: btnStyle(G.dim),
+    onClick: () => setRec(RECS.search)
+  }, "\uD83C\uDF3F No enemies yet")), step === 'q2_close' && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 18,
+      lineHeight: 1.7,
+      marginBottom: 20
+    }
+  }, "How is Celtic doing right now?"), React.createElement("button", {
+    style: btnStyle(G.wolf),
+    onClick: () => setStep('q3_close')
+  }, "\uD83D\uDC3A Celtic is ready! (", cHP, " HP)"), React.createElement("button", {
+    style: btnStyle(G.red),
+    onClick: () => setRec(RECS.protect)
+  }, "\uD83D\uDC94 Celtic is hurt or low HP!")), step === 'q2_far' && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 18,
+      lineHeight: 1.7,
+      marginBottom: 20
+    }
+  }, "Is Hunter's Mark \uD83C\uDFAF already on the enemy?"), React.createElement("button", {
+    style: btnStyle(G.gold),
+    onClick: () => setRec(RECS.bow_marked)
+  }, "\u2705 Yes, Hunter's Mark is on!"), React.createElement("button", {
+    style: btnStyle(G.dim),
+    onClick: () => setRec(RECS.bow_mark_first)
+  }, "\u274C Not yet")), step === 'q3_close' && React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 18,
+      lineHeight: 1.7,
+      marginBottom: 20
+    }
+  }, "Is Hunter's Mark \uD83C\uDFAF active on the enemy?"), React.createElement("button", {
+    style: btnStyle(G.gold),
+    onClick: () => setRec(RECS.celtic_marked)
+  }, "\u2705 Yes, Hunter's Mark is active!"), React.createElement("button", {
+    style: btnStyle(G.dim),
+    onClick: () => setRec(RECS.celtic_mark_first)
+  }, "\u274C Not yet")), React.createElement("button", {
+    onClick: onClose,
+    style: {
+      width: '100%',
+      marginTop: 8,
+      padding: 14,
+      background: 'transparent',
+      border: `1px solid ${G.border}`,
+      color: G.dim,
+      borderRadius: 12,
+      cursor: 'pointer',
+      fontFamily: fB,
+      fontSize: 15
+    }
+  }, "Cancel")) : React.createElement(React.Fragment, null, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 15,
+      marginBottom: 20
+    }
+  }, "\u26A1 Kalorian Should\u2026"), React.createElement("div", {
+    style: {
+      background: G.bg,
+      border: `2px solid ${chosen.col}`,
+      borderRadius: 16,
+      padding: 22,
+      marginBottom: 20
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 48,
+      marginBottom: 10
+    }
+  }, chosen.emoji), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fH,
+      fontSize: 20
+    }
+  }, rec.title), React.createElement("div", {
+    style: {
+      display: 'inline-block',
+      background: chosen.col + '22',
+      border: `1px solid ${chosen.col}`,
+      color: chosen.col,
+      fontFamily: fB,
+      fontSize: 11,
+      padding: '4px 14px',
+      borderRadius: 99,
+      marginTop: 8
+    }
+  }, chosen.tag), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 16,
+      lineHeight: 1.8,
+      marginTop: 16
+    }
+  }, rec.why)), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 12
+    }
+  }, React.createElement("button", {
+    onClick: () => {
+      setStep('q1');
+      setRec(null);
+    },
+    style: {
+      flex: 1,
+      padding: 15,
+      background: G.cardHi,
+      border: `1px solid ${G.border}`,
+      color: G.cream,
+      borderRadius: 12,
+      cursor: 'pointer',
+      fontFamily: fB,
+      fontSize: 16
+    }
+  }, "\u2190 Ask Again"), React.createElement("button", {
+    onClick: onClose,
+    style: {
+      flex: 2,
+      padding: 15,
+      background: G.gold,
+      border: 'none',
+      color: G.bg,
+      borderRadius: 12,
+      cursor: 'pointer',
+      fontFamily: fH,
+      fontSize: 16,
+      fontWeight: 700
+    }
+  }, "Got it! \u2713")))));
+}
+function ActionModal({
+  action,
+  onClose
+}) {
+  return React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,.88)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+      padding: 20
+    }
+  }, React.createElement("div", {
+    className: "fade-up",
+    style: {
+      background: G.card,
+      border: `2px solid ${action.col}`,
+      borderRadius: 24,
+      padding: 28,
+      maxWidth: 540,
+      width: '100%',
+      maxHeight: '90vh',
+      overflowY: 'auto'
+    }
+  }, React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 22
+    }
+  }, React.createElement("div", null, React.createElement("div", {
+    style: {
+      fontSize: 52
+    }
+  }, action.emoji), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fH,
+      fontSize: 22,
+      marginTop: 10
+    }
+  }, action.name), React.createElement("div", {
+    style: {
+      display: 'inline-block',
+      background: action.col + '22',
+      border: `1px solid ${action.col}`,
+      color: action.col,
+      fontFamily: fB,
+      fontSize: 11,
+      padding: '4px 14px',
+      borderRadius: 99,
+      marginTop: 8
+    }
+  }, action.tag)), React.createElement("button", {
+    onClick: onClose,
+    style: {
+      background: G.border,
+      border: 'none',
+      color: G.cream,
+      borderRadius: 10,
+      padding: '10px 16px',
+      cursor: 'pointer',
+      fontSize: 20,
+      minWidth: 48,
+      minHeight: 48
+    }
+  }, "\u2715")), React.createElement(InfoBox, {
+    color: G.gold,
+    label: "\uD83D\uDCCD When to use this",
+    text: action.when
+  }), React.createElement(InfoBox, {
+    color: G.wolf,
+    label: "\uD83D\uDCAC Say to Dad",
+    text: action.say,
+    italic: true
+  }), React.createElement("div", {
+    style: {
+      marginBottom: 20
+    }
+  }, action.steps.map((s, i) => React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      gap: 16,
+      marginBottom: 16
+    }
+  }, React.createElement("div", {
+    style: {
+      width: 36,
+      height: 36,
+      minWidth: 36,
+      background: G.gold,
+      borderRadius: 99,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: G.bg,
+      fontFamily: fH,
+      fontSize: 15,
+      fontWeight: 900
+    }
+  }, i + 1), React.createElement("div", {
+    style: {
+      paddingTop: 4
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fB,
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, s.n), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 15,
+      lineHeight: 1.7,
+      marginTop: 4
+    }
+  }, s.d))))), React.createElement("div", {
+    style: {
+      background: '#142810',
+      border: `1px solid #2a5020`,
+      borderRadius: 12,
+      padding: '14px 16px',
+      marginBottom: 22
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.green,
+      fontFamily: fB,
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "\uD83D\uDCA1 Kalorian's Tip"), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 15,
+      lineHeight: 1.7,
+      marginTop: 6
+    }
+  }, action.tip)), React.createElement("button", {
+    onClick: onClose,
+    style: {
+      width: '100%',
+      padding: 18,
+      background: G.gold,
+      border: 'none',
+      color: G.bg,
+      borderRadius: 14,
+      cursor: 'pointer',
+      fontFamily: fH,
+      fontSize: 17,
+      fontWeight: 700
+    }
+  }, "Let's go! \u2694\uFE0F")));
+}
+function WelcomePage({
+  onBegin
+}) {
+  const cards = [{
+    emoji: '🧭',
+    title: 'Who is Kalorian?',
+    text: 'A fearless human Ranger who has traveled wild lands and ancient ruins in search of mystery. He\'s fast, deadly with a bow, and can befriend almost any creature. Level 12 — a true expert.'
+  }, {
+    emoji: '🐺',
+    title: 'Who is Celtic?',
+    text: 'Kalorian\'s Dire Wolf companion — enormous, lightning-fast, and completely loyal. Celtic fights alongside Kalorian, knocks enemies flat with his bite, and always senses danger first.'
+  }, {
+    emoji: '🎮',
+    title: 'How Do You Play?',
+    text: "On your turn: fire your bow, send Celtic to attack, or cast a spell. Tap 'What Should I Do?' if you're unsure — it guides you step by step. Tell Dad your action, roll the dice, have an adventure!"
+  }];
+  return React.createElement("div", {
+    style: {
+      minHeight: '100vh',
+      background: G.bg,
+      padding: '32px 20px 48px'
+    }
+  }, React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      overflow: 'hidden',
+      pointerEvents: 'none',
+      zIndex: 0
+    }
+  }, Array.from({
+    length: 28
+  }).map((_, i) => React.createElement("div", {
+    key: i,
+    style: {
+      position: 'absolute',
+      width: i % 4 === 0 ? 3 : 2,
+      height: i % 4 === 0 ? 3 : 2,
+      borderRadius: '50%',
+      background: G.gold,
+      opacity: .06 + i % 5 * .04,
+      top: `${i * 41 % 100}%`,
+      left: `${i * 67 % 100}%`,
+      animation: `pulse ${2 + i % 3}s ease-in-out infinite`,
+      animationDelay: `${i * .25}s`
+    }
+  }))), React.createElement("div", {
+    style: {
+      maxWidth: 580,
+      margin: '0 auto',
+      position: 'relative',
+      zIndex: 1
+    }
+  }, React.createElement("div", {
+    className: "fade-up",
+    style: {
+      textAlign: 'center',
+      marginBottom: 32
+    }
+  }, React.createElement("div", {
+    className: "bounce",
+    style: {
+      fontSize: 96,
+      lineHeight: 1
+    }
+  }, "\uD83D\uDC3A"), React.createElement("h1", {
+    style: {
+      fontFamily: fH,
+      color: G.gold,
+      fontSize: 34,
+      lineHeight: 1.2,
+      marginTop: 22,
+      textShadow: `0 0 50px ${G.gold}45`
+    }
+  }, "Kalorian"), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fH,
+      fontSize: 22,
+      marginTop: 6
+    }
+  }, "& Celtic"), React.createElement("div", {
+    style: {
+      display: 'inline-block',
+      background: G.card,
+      border: `1px solid ${G.wolf}`,
+      color: G.wolf,
+      fontFamily: fB,
+      fontSize: 13,
+      padding: '7px 22px',
+      borderRadius: 99,
+      marginTop: 16,
+      letterSpacing: 2
+    }
+  }, "BEAST MASTER RANGER \u2022 LEVEL 12")), React.createElement("div", {
+    className: "fade-up",
+    style: {
+      animationDelay: '.1s',
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      borderLeft: `4px solid ${G.gold}`,
+      borderRadius: 16,
+      padding: '22px 24px',
+      marginBottom: 24
+    }
+  }, React.createElement("p", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 16,
+      lineHeight: 1.9
+    }
+  }, React.createElement("em", {
+    style: {
+      color: G.gold
+    }
+  }, "Kalorian has always followed the wild places"), " \u2014 ancient ruins, forgotten forests, mysteries the maps don't show. He never travels alone. Celtic, his Dire Wolf, has been at his side since they were both young."), React.createElement("p", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 16,
+      lineHeight: 1.9,
+      marginTop: 14
+    }
+  }, "Today, they enter ", React.createElement("em", {
+    style: {
+      color: G.goldHi
+    }
+  }, "Nythalara"), " \u2014 a city that rose from the sea, still lit from within, still running, as if no time has passed at all. The biggest mystery Kalorian has ever faced. And he wouldn't have it any other way.")), cards.map((c, i) => React.createElement("div", {
+    key: i,
+    className: "fade-up",
+    style: {
+      animationDelay: `${.2 + i * .1}s`,
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      borderRadius: 16,
+      padding: '20px 22px',
+      display: 'flex',
+      gap: 18,
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 38,
+      flexShrink: 0
+    }
+  }, c.emoji), React.createElement("div", null, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 14,
+      marginBottom: 8
+    }
+  }, c.title), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 15,
+      lineHeight: 1.8
+    }
+  }, c.text)))), React.createElement("div", {
+    className: "fade-up",
+    style: {
+      animationDelay: '.5s',
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      borderRadius: 16,
+      padding: '18px 20px',
+      marginBottom: 28
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 11,
+      textTransform: 'uppercase',
+      letterSpacing: 2,
+      marginBottom: 14
+    }
+  }, "\u26A1 Quick Stats"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3,1fr)',
+      gap: 10
+    }
+  }, [{
+    v: '101',
+    l: 'Kalorian HP',
+    c: G.green
+  }, {
+    v: '45',
+    l: 'Celtic HP',
+    c: G.wolf
+  }, {
+    v: '17',
+    l: 'Armor (AC)'
+  }, {
+    v: '+9',
+    l: 'Bow Attack',
+    c: G.red
+  }, {
+    v: 'd8+5',
+    l: 'Arrow Dmg',
+    c: G.red
+  }, {
+    v: '+5',
+    l: 'Celtic Bite',
+    c: G.wolf
+  }].map((s, i) => React.createElement("div", {
+    key: i,
+    style: {
+      background: G.bg,
+      borderRadius: 10,
+      padding: '12px 8px',
+      textAlign: 'center'
+    }
+  }, React.createElement("div", {
+    style: {
+      color: s.c || G.gold,
+      fontFamily: fH,
+      fontSize: 20
+    }
+  }, s.v), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 11,
+      marginTop: 4
+    }
+  }, s.l))))), React.createElement("div", {
+    className: "fade-up",
+    style: {
+      animationDelay: '.6s'
+    }
+  }, React.createElement("button", {
+    className: "glow-btn",
+    onClick: onBegin,
+    style: {
+      width: '100%',
+      padding: '24px 0',
+      background: `linear-gradient(135deg,${G.gold},${G.goldHi})`,
+      border: 'none',
+      color: G.bg,
+      borderRadius: 18,
+      cursor: 'pointer',
+      fontFamily: fH,
+      fontSize: 21,
+      fontWeight: 900
+    }
+  }, "\u2694\uFE0F  Begin the Adventure  \u2694\uFE0F"), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 14,
+      textAlign: 'center',
+      marginTop: 12
+    }
+  }, "Kalorian & Celtic are ready."))));
+}
+function SheetPage({
+  onBack
+}) {
+  const [kHP, setKHP] = useState(K_MAX);
+  const [cHP, setCHP] = useState(C_MAX);
+  const [slots, setSlots] = useState([...SL_MAX]);
+  const [markOn, setMarkOn] = useState(false);
+  const [elemReady, setElemReady] = useState(true);
+  const [showRec, setShowRec] = useState(false);
+  const [activeAct, setActiveAct] = useState(null);
+  const longRest = () => {
+    setKHP(K_MAX);
+    setCHP(C_MAX);
+    setSlots([...SL_MAX]);
+    setMarkOn(false);
+    setElemReady(true);
+  };
+  const shortRest = () => {
+    const d10 = () => Math.ceil(Math.random() * 10);
+    setKHP(h => Math.min(K_MAX, h + d10() + 3));
+    setCHP(h => Math.min(C_MAX, h + d10() + 2));
+  };
+  return React.createElement("div", {
+    style: {
+      minHeight: '100vh',
+      background: G.bg
+    }
+  }, React.createElement("div", {
+    style: {
+      background: G.card,
+      borderBottom: `1px solid ${G.border}`,
+      padding: '14px 20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      position: 'sticky',
+      top: 0,
+      zIndex: 10
+    }
+  }, React.createElement("button", {
+    onClick: onBack,
+    style: {
+      background: 'transparent',
+      border: `1px solid ${G.border}`,
+      color: G.dim,
+      borderRadius: 10,
+      padding: '10px 16px',
+      cursor: 'pointer',
+      fontFamily: fB,
+      fontSize: 15,
+      minHeight: 48
+    }
+  }, "\u2190 Back"), React.createElement("div", {
+    style: {
+      textAlign: 'center'
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 16
+    }
+  }, "Kalorian & Celtic"), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 10,
+      letterSpacing: 1
+    }
+  }, "BEAST MASTER \u2022 LVL 12")), React.createElement("div", {
+    style: {
+      fontSize: 30
+    }
+  }, "\uD83D\uDC3A")), React.createElement("div", {
+    style: {
+      maxWidth: 580,
+      margin: '0 auto',
+      padding: '20px 20px 48px'
+    }
+  }, React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, React.createElement(HPTracker, {
+    label: "Kalorian",
+    emoji: "\uD83E\uDDED",
+    current: kHP,
+    max: K_MAX,
+    color: G.green,
+    onSet: setKHP
+  })), React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, React.createElement(HPTracker, {
+    label: "Celtic \u2014 Dire Wolf",
+    emoji: "\uD83D\uDC3A",
+    current: cHP,
+    max: C_MAX,
+    color: G.wolf,
+    onSet: setCHP
+  })), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      marginBottom: 10
+    }
+  }, React.createElement(StatBadge, {
+    label: "Armor (AC)",
+    value: "17"
+  }), React.createElement(StatBadge, {
+    label: "Bow Attack",
+    value: "+9",
+    sub: "d20 + 9 to hit",
+    color: G.red
+  }), React.createElement(StatBadge, {
+    label: "Arrow Damage",
+    value: "d8+5",
+    color: G.red
+  })), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 10,
+      marginBottom: 14
+    }
+  }, React.createElement(StatBadge, {
+    label: "Celtic Speed",
+    value: "50 ft",
+    color: G.wolf
+  }), React.createElement(StatBadge, {
+    label: "Celtic Attack",
+    value: "+5",
+    sub: "d20 + 5 to hit",
+    color: G.wolf
+  }), React.createElement(StatBadge, {
+    label: "Celtic Damage",
+    value: "2d6+3",
+    color: G.wolf
+  })), React.createElement("button", {
+    onClick: () => setMarkOn(m => !m),
+    style: {
+      width: '100%',
+      background: markOn ? '#162a08' : G.card,
+      border: `2px solid ${markOn ? G.gold : G.border}`,
+      borderRadius: 16,
+      padding: '18px 20px',
+      cursor: 'pointer',
+      textAlign: 'left',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      transition: 'all .2s',
+      marginBottom: 14,
+      minHeight: 76
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 34
+    }
+  }, "\uD83C\uDFAF"), React.createElement("div", null, React.createElement("div", {
+    style: {
+      color: markOn ? G.gold : G.cream,
+      fontFamily: fH,
+      fontSize: 16
+    }
+  }, "Hunter's Mark ", markOn ? '— ACTIVE ✓' : '— Off'), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 13,
+      marginTop: 4
+    }
+  }, markOn ? '+d6 damage on every hit to the marked enemy!' : 'Tap to track when this spell is active in the game'))), React.createElement("button", {
+    onClick: () => setElemReady(r => !r),
+    style: {
+      width: '100%',
+      background: elemReady ? '#1c1228' : G.card,
+      border: `2px solid ${elemReady ? G.purple : G.border}`,
+      borderRadius: 16,
+      padding: '18px 20px',
+      cursor: 'pointer',
+      textAlign: 'left',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 16,
+      transition: 'all .2s',
+      marginBottom: 14,
+      minHeight: 76
+    }
+  }, React.createElement("div", {
+    style: {
+      fontSize: 34
+    }
+  }, "\uD83C\uDF0B"), React.createElement("div", null, React.createElement("div", {
+    style: {
+      color: elemReady ? G.purple : G.dim,
+      fontFamily: fH,
+      fontSize: 16
+    }
+  }, "Elemental Stone ", elemReady ? '— READY ✓' : '— Used'), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 13,
+      marginTop: 4
+    }
+  }, elemReady ? 'Tap to summon a powerful elemental. One use until a Long Rest!' : 'Already used — refills on your next Long Rest.'))), React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, React.createElement(SpellSlots, {
+    slots: slots,
+    onChange: setSlots
+  })), React.createElement("div", {
+    style: {
+      background: G.card,
+      border: `2px solid ${G.gold}`,
+      borderRadius: 16,
+      padding: '20px 20px',
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.gold,
+      fontFamily: fH,
+      fontSize: 15,
+      marginBottom: 18
+    }
+  }, "\u26A1 Your Turn"), React.createElement("button", {
+    onClick: () => setShowRec(true),
+    style: {
+      width: '100%',
+      padding: '20px 0',
+      marginBottom: 18,
+      background: `linear-gradient(135deg,${G.gold}22,${G.goldHi}12)`,
+      border: `2px solid ${G.gold}`,
+      color: G.gold,
+      borderRadius: 14,
+      cursor: 'pointer',
+      fontFamily: fH,
+      fontSize: 19,
+      fontWeight: 700
+    }
+  }, "\uD83C\uDFB2 What Should I Do?"), React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 12,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+      marginBottom: 12
+    }
+  }, "Or pick any action:"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10
+    }
+  }, ACTIONS.map(a => React.createElement("button", {
+    key: a.id,
+    onClick: () => setActiveAct(a),
+    style: {
+      background: G.bg,
+      border: `1px solid ${G.border}`,
+      borderRadius: 12,
+      padding: '15px 12px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      minHeight: 58,
+      textAlign: 'left',
+      transition: 'border-color .15s'
+    },
+    onTouchStart: e => e.currentTarget.style.borderColor = a.col,
+    onTouchEnd: e => e.currentTarget.style.borderColor = G.border
+  }, React.createElement("span", {
+    style: {
+      fontSize: 24
+    }
+  }, a.emoji), React.createElement("span", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 13,
+      lineHeight: 1.4
+    }
+  }, a.name))))), React.createElement("div", {
+    style: {
+      background: G.card,
+      border: `1px solid ${G.wolfDim}`,
+      borderRadius: 16,
+      padding: '18px 20px',
+      marginBottom: 14
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.wolf,
+      fontFamily: fH,
+      fontSize: 14,
+      marginBottom: 14
+    }
+  }, "\uD83D\uDC3A Celtic \u2014 Combat Reference"), React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3,1fr)',
+      gap: 8,
+      marginBottom: 14
+    }
+  }, [{
+    l: 'HP',
+    v: `${cHP}/${C_MAX}`,
+    c: cHP < 15 ? G.red : G.wolf
+  }, {
+    l: 'Armor',
+    v: '14'
+  }, {
+    l: 'Speed',
+    v: '50 ft'
+  }, {
+    l: 'To Hit',
+    v: '+5'
+  }, {
+    l: 'Damage',
+    v: '2d6+3'
+  }, {
+    l: 'Knock DC',
+    v: '13 STR'
+  }].map((s, i) => React.createElement("div", {
+    key: i,
+    style: {
+      background: G.bg,
+      borderRadius: 8,
+      padding: '10px 8px',
+      textAlign: 'center'
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.dim,
+      fontFamily: fB,
+      fontSize: 10,
+      textTransform: 'uppercase',
+      letterSpacing: 1
+    }
+  }, s.l), React.createElement("div", {
+    style: {
+      color: s.c || G.cream,
+      fontFamily: fH,
+      fontSize: 18,
+      marginTop: 4
+    }
+  }, s.v)))), React.createElement("div", {
+    style: {
+      background: '#0a2020',
+      borderRadius: 10,
+      padding: '13px 14px',
+      borderLeft: `3px solid ${G.wolf}`
+    }
+  }, React.createElement("div", {
+    style: {
+      color: G.wolf,
+      fontFamily: fB,
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, "\uD83D\uDC3E Pack Tactics"), React.createElement("div", {
+    style: {
+      color: G.cream,
+      fontFamily: fB,
+      fontSize: 15,
+      marginTop: 6,
+      lineHeight: 1.7
+    }
+  }, "When Kalorian stands next to Celtic's target, Celtic rolls TWICE and takes the better number to attack!"))), React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 12
+    }
+  }, React.createElement("button", {
+    onClick: shortRest,
+    style: {
+      flex: 1,
+      padding: '18px 0',
+      minHeight: 68,
+      background: G.card,
+      border: `1px solid ${G.border}`,
+      color: G.cream,
+      borderRadius: 14,
+      cursor: 'pointer',
+      fontFamily: fB,
+      fontSize: 16
+    }
+  }, "\uD83C\uDF19 Short Rest", React.createElement("br", null), React.createElement("span", {
+    style: {
+      color: G.dim,
+      fontSize: 13
+    }
+  }, "Recover some HP")), React.createElement("button", {
+    onClick: longRest,
+    style: {
+      flex: 1,
+      padding: '18px 0',
+      minHeight: 68,
+      background: '#0e2a18',
+      border: `1px solid #2a6a38`,
+      color: G.green,
+      borderRadius: 14,
+      cursor: 'pointer',
+      fontFamily: fB,
+      fontSize: 16
+    }
+  }, "\u2600\uFE0F Long Rest", React.createElement("br", null), React.createElement("span", {
+    style: {
+      color: G.dim,
+      fontSize: 13
+    }
+  }, "Full HP + all spells")))), showRec && React.createElement(RecommendEngine, {
+    cHP: cHP,
+    onClose: () => setShowRec(false)
+  }), activeAct && React.createElement(ActionModal, {
+    action: activeAct,
+    onClose: () => setActiveAct(null)
+  }));
+}
+function App() {
+  useEffect(() => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('root').style.display = 'block';
+  }, []);
+  const [page, setPage] = useState('welcome');
+  return page === 'welcome' ? React.createElement(WelcomePage, {
+    onBegin: () => setPage('sheet')
+  }) : React.createElement(SheetPage, {
+    onBack: () => setPage('welcome')
+  });
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App, null));
+</script>
+</body>
+</html>
